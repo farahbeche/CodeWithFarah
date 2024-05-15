@@ -1,0 +1,470 @@
+---
+title: "Regression Project Code"
+author: "Sanjana Battula, Farah Beche, Kajal Gupta, and Shreya Ramella"
+date: "2024-04-21"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+This dataset provides comprehensive information about each driver's performance throughout the 2023 Formula 1 racing season, including their qualifying times, race positions, lap times, pit stop durations, and final rankings.
+
+**year:** Formula 1 racing year, specifically for the 2023 season.
+
+**code:** Driver code, representing the first three letters of each driver's last name.
+
+**q1:** Lap time recorded by the driver during Qualifying 1 (Q1) session.
+
+**q2:** Lap time recorded by the driver during Qualifying 2 (Q2) session.
+
+**q3:** Lap time recorded by the driver during Qualifying 3 (Q3) session.
+
+**race_name:** Name of the race circuit where the Formula 1 race took place.
+
+**position:** Grid position of the driver at the start of the race.
+
+**rank:** Final ranking or finishing position of the driver at the end of the race.
+
+**laps:** Total number of laps completed by the driver during the race.
+
+**fastestLapTime:** Fastest lap time recorded by the driver during the race.
+
+**tot_pit_time:** Total amount of time it took for pit stops during the race, measured in milliseconds.
+
+**labels:** Description of the status of the driver during the race (e.g., finished, retired, disqualified).
+
+**points:** Points awarded to each driver based on their finishing position in the race. 
+
+**statusId:** Status of the race for the driver in numbers 
+
+**fastestlap_ms:** Fastest lap time recorded by the driver during the race, measured in milliseconds.
+
+**q1_ms:** Lap time recorded by the driver during Qualifying 1 (Q1) sessions, measured in milliseconds
+
+**q2_ms:** Lap time recorded by the driver during Qualifying 2 (Q2) sessions, measured in milliseconds
+
+**q3_ms:** Lap time recorded by the driver during Qualifying 3 (Q3) sessions, measured in milliseconds
+
+
+**Loading the Dataset**
+```{r, message = FALSE}
+# Loading necessary libraries 
+library(dplyr)  # for data manipulation
+# Clear the environment
+rm(list = ls())
+# Read data from the CSV file into a dataframe named F1Final
+F1Final <- read.csv("F1Data.csv", header = TRUE)  
+# "F1Data.csv" is the file containing the F1 racing data, with headers present
+```
+
+**Converting time data (fastestLapTime, q1, q2 & q3) into milliseconds**
+```{r, warning=FALSE, message = FALSE}
+# Conversions of values into milliseconds
+# Removing white spaces
+library(lubridate)
+F1Final$fastestLapTime <- trimws(F1Final$fastestLapTime)
+F1Final$fastestlap_ms = as.numeric(lubridate::ms(as.character(F1Final$fastestLapTime)))*1000
+# removing white space for q1
+F1Final$q1 <- trimws(F1Final$q1)
+F1Final$q1_ms = as.numeric(lubridate::ms(as.character(F1Final$q1)))*1000
+# removing white space for q2
+F1Final$q2 <- trimws(F1Final$q2)
+F1Final$q2_ms = as.numeric(lubridate::ms(as.character(F1Final$q2)))*1000
+# removing white space for q3
+F1Final$q3 <- trimws(F1Final$q3)
+F1Final$q3_ms = as.numeric(lubridate::ms(as.character(F1Final$q3)))*1000
+```
+
+**Printing the first rows:**
+```{r}
+# Creating a sub-dataset
+#install.packages("dplyr")
+library(dplyr)
+# Selecting specific columns from the F1Final df and creating a new df(F1_Subdf)
+F1_Subdf <- F1Final %>% 
+  select(statusId, position, rank, fastestlap_ms, tot_pit_time, laps, points, 
+         q1_ms, q2_ms, q3_ms)
+# Displaying the first few rows of the F1_Subdf dataframe
+head(F1_Subdf)
+```
+
+**Univariable Analysis:**
+```{r}
+# Display the number of rows in the dataframe
+nrow(F1_Subdf)
+# Show descriptive statistics for each variable in the F1_Subdf dataframe
+summary(F1_Subdf)
+# Extract the mean of the variable of interest
+summary_outcome_1 <- summary(F1_Subdf$points)
+mean_outcome_2 <- summary_outcome_1["Mean"]
+mean_outcome_2
+```
+
+**Simple Linear Regression**
+```{r}
+# Fit a linear model with all possible predictors (except the outcome variable) 
+# to predict 'points'
+lm_mod1 <- lm(points ~ ., data = F1_Subdf)
+# Display summary statistics of the linear model
+summary(lm_mod1)
+```
+*Rank, Position and statusId are significant predictors.*
+
+Interpreting the coeffcients:
+
+**statusId**: For each unit increase in statusId, the expected points earned by a driver increase by approximately 0.1004, holding all other predictors constant.
+
+**position**: For each unit decrease in the driver's position, the expected points earned increase by approximately 0.6313, holding all other predictors constant. This suggests that starting lower in a race leads to more points.
+
+**rank**: For each unit decrease in the driver's rank, the expected points earned increase by approximately 1.516. This might seem counterintuitive at first, but in Formula 1, a lower rank (closer to 1) actually indicates a better performance and more points.
+
+**fastestlap_ms, tot_pit_time, laps, q1_ms, q2_ms, q3_ms**: These predictors do not significantly influence the points earned by the driver, based on their coefficients and p-values. 
+
+**Plots of Linear Model**
+```{r}
+# Plotting Standardized residuals vs. fitted values
+plot(fitted(lm_mod1), rstandard(lm_mod1), xlab = "Fitted", 
+     ylab = "Standardized Residual" , col="cornflowerblue" )
+abline(h = 0, col = "hotpink")
+```
+*The residuals are scattered around the horizontal zero line, forming a horizontal band without any clear pattern or trend across the range of fitted values. This suggests that the assumptions of constant variance and linearity in the regression model are likely satisfied. However, there are a few potential outliers or influential points with large positive or negative residuals that may warrant further investigation.*
+
+**QQ PLOT**
+```{r}
+# Set up layout for two panels side by side
+par(mfrow = c(1, 2))
+# Left panel: QQ plot of standardized residuals
+qqnorm(rstandard(lm_mod1), main = "Q-Q Plot" , col = "slateblue") 
+abline(0, 1, col = "red3")
+# Right panel: Histogram of standardized residuals
+hist(rstandard(lm_mod1), main = "Histogram", xlab = "Standardized Residuals",
+     col = "lightblue")
+```
+*The plot on the left is a Q-Q (Quantile-Quantile) plot of standardized residuals against the theoretical quantiles of a normal distribution. In this plot there are points towards the tails that are deviating indicating a violation of the normality assumption for the residuals. The plot on the right is a histogram of the standardized residuals. This plot appears to be slightly skewed to the right, with a peak around 0 and a longer tail on the positive side. This further suggests a deviation from the normality assumption for the residuals. Together, these two plots indicate that the assumptions of normality and homoscedasticity (constant variance of residuals) for the linear regression model may be violated.*
+
+**Pearsons Correlation**
+```{r}
+# Remove rows with NA values from the F1_Subdf dataframe
+F1_df <- na.omit(F1_Subdf)
+corr_df <- F1_df %>% select(-points)
+# Compute the correlation matrix for the F1_df dataframe
+cor_matrix <- cor(corr_df)
+# Display the correlation matrix
+cor_matrix
+```
+
+**Correlation Matrix plot** 
+```{r, message = FALSE}
+library(corrplot)
+# Plot the correlation matrix using corrplot
+corrplot(cor_matrix, method = "square")
+```
+
+**Outliers**
+```{r}
+# Calculate the standardized residuals from the linear model lm_mod1
+std_resid <- rstandard(lm_mod1)
+# Identify the indices of observations with standardized residuals > 3 or < -3
+outlier_indices <- which(std_resid > 3 | std_resid < -3)
+# Print the standardized residuals
+print(std_resid)
+```
+*The absence of any output from the line of code indicates that there are no observations in the dataset considered outliers based on their standardized residuals. This implies that none of the data points exhibit unusually large deviations from the predicted values of the outcome variable when compared to the variability of the model. Consequently, the linear regression model appears to adequately capture the relationships between the predictor variables and the outcome variable without any extreme or influential observations. This suggests that the model provides a reasonable fit to the data, and there is no need for further investigation or adjustments to address outlier observations.*
+
+**Levarage Points**
+```{r}
+# Calculate the hat values for each observation in the linear model lm_mod1
+hatv <- hatvalues(lm_mod1)  
+# Identify observations with hat values > than twice the mean of all hat values
+outlier_hatv <- hatv[hatv > 2 * mean(hatv)]
+# Print the identified outlier hat values
+outlier_hatv
+```
+*The output indicates that certain data points in the dataset have a strong influence on the predictions made by the linear regression model. These points, identified by their respective indices, have leverages (a measure of influence) that are at least twice the average leverage of all data points. This means that these particular observations disproportionately affect the estimated coefficients and overall fit of the model, potentially due to their extreme values or unique characteristics.*
+
+**Leverage Plot**
+```{r, message = FALSE}
+# Load the 'faraway' package, which contains the 'halfnorm' function
+library(faraway)
+# Plot leverage using a half-normal plot with automatic labeling
+halfnorm(hatv, nlab = 2, ylab = "Leverages")
+```
+*High leverage points may or may not be influential.*
+
+**Bonferroni Value**
+```{r}
+# Compute studentized residuals
+stud <- rstudent(lm_mod1)
+# Calculate the number of observations
+n <- nrow(model.matrix(lm_mod1))
+# Calculate the number of parameters (including the intercept)
+p <- length(coefficients(lm_mod1))  
+# Calculate the Bonferroni critical value
+bonferroni_critical_value <- qt(1 - 0.05 / (n * 2), n - p - 1) 
+# Print the Bonferroni critical value
+print(paste("Bonferroni Value:", bonferroni_critical_value))
+# Identify outliers using Bonferroni correction
+outliers <- which(abs(stud) > qt(1 - 0.05 / (n * 2), n - p - 1))  
+```
+*The absence of any output from the Bonferroni test indicates that no outliers were detected based on this correction method. The Bonferroni correction adjusts the significance level to account for multiple comparisons, reducing the likelihood of false positives when identifying outliers. In this case, none of the observations exhibited studentized residuals that exceeded the Bonferroni critical value, even after considering the adjusted significance level. Therefore, it can be concluded that no outliers were present in the dataset based on the Bonferroni test. This suggests that the linear regression model adequately captures the relationships between the predictor variables and the outcome variable without any extreme or influential observations that would significantly impact the results.*
+
+**COOK'S distance**
+```{r}
+# Calculate Cook's distance for each observation in the linear model lm_mod1
+cook <- cooks.distance(lm_mod1)
+# Identify points with Cook's distance above 0.5
+outlier_cook <- cook[which(cook > 0.5)]
+outlier_cook
+```
+*Cook's distance measures the effect of deleting a given observation from a linear regression model. A large Cook's distance for a specific observation suggests that excluding that observation would substantially alter the model's predictions. In this instance, the only observation listed is 174, indicating that removing this particular influential data point would notably affect the model's fitted values. This suggests that observation 174 has characteristics or values that strongly influence the model's predictions, warranting further investigation into its potential impact on the overall analysis.*
+
+**Cook's Distance Plot**
+```{r}
+# Load the 'faraway' package, which contains the 'halfnorm' function
+library(faraway)
+# Plot Cook's distances using a half-normal plot with automatic labeling
+halfnorm(cook, nlab = 2, ylab = "Cook's distances")
+```
+*Influential point from the above plot is observation number 82.*
+
+**Influential Point:**
+```{r}
+F1_Subdf[82,]
+```
+**Model with removed Influential Observation:**
+```{r}
+F1_Subset <- F1_Subdf[-c(82),]
+lmodi <- lm(points ~ ., data = F1_Subset)
+summary(lmodi)
+```
+
+**VIF of Full Model**
+```{r}
+# Extract the model matrix from the linear model excluding the intercept column
+VIF <- model.matrix(lm_mod1)[,-1]
+# Calculate the Variance Inflation Factors (VIF) for the predictor variables
+vif_values <- vif(VIF)
+vif_values
+```
+*VIF measures the severity of multicollinearity, which occurs when predictor variables are highly correlated with each other. Any values over 5 is high while above 10 is severe implying multicollinearity. This suggests high multicollinearity among fastestlap_ms, q1_ms, q2_ms & q3_ms.*
+
+*VIF of Model removing q2_ms*
+```{r}
+lm_mod2 <- lm(points ~ position + statusId + rank + fastestlap_ms + 
+                tot_pit_time + laps + q1_ms + q3_ms, data = F1_Subdf)
+# Extract the model matrix from the linear model, excluding the intercept column
+VIF2 <- model.matrix(lm_mod2)[,-1]
+# Calculate the Variance Inflation Factors (VIF) for the predictor variables
+vif_values2 <- vif(VIF2)
+vif_values2
+```
+*Although reduced the vif values for the predictors (fastestlap_ms, q1_ms, and q3_ms) are still above 10.*
+
+*VIF of Model removing fastestlap_ms*
+```{r}
+lm_mod3 <- lm(points ~ position + statusId + rank + tot_pit_time + 
+                laps + q1_ms + q2_ms + q3_ms, data = F1_Subdf)
+# Extract the model matrix from the linear model, excluding the intercept column
+VIF3 <- model.matrix(lm_mod3)[,-1]
+# Calculate the Variance Inflation Factors (VIF) for the predictor variables
+vif_values3 <- vif(VIF3)
+vif_values3
+```
+*Although reduced the vif values for the predictors (q1_ms, q2_ms and q3_ms) are still above 10.*
+
+*VIF of Model removing q1_ms*
+```{r}
+lm_mod4 <- lm(points ~ position + statusId + rank + tot_pit_time + laps + 
+                fastestlap_ms + q2_ms + q3_ms, data = F1_Subdf)
+# Extract the model matrix from the linear model, excluding the intercept column
+VIF4 <- model.matrix(lm_mod4)[,-1]
+# Calculate the Variance Inflation Factors (VIF) for the predictor variables
+vif_values4 <- vif(VIF4)
+vif_values4
+```
+*Although reduced the vif values for the predictors (fastestlap_ms, q2_ms and q3_ms) are still above 10.*
+
+*VIF of Model removing q3_ms*
+```{r}
+lm_mod5 <- lm(points ~ position + statusId + rank + tot_pit_time + laps + 
+                fastestlap_ms + q2_ms + q1_ms, data = F1_Subdf)
+# Extract the model matrix from the linear model, excluding the intercept column
+VIF5 <- model.matrix(lm_mod5)[,-1]
+# Calculate the Variance Inflation Factors (VIF) for the predictor variables
+vif_values5 <- vif(VIF5)
+vif_values5
+```
+*If we removed q3_ms the vif value of q2_ms drops significantly to be lower than 10.*
+
+**AIC**
+```{r, warning = FALSE}
+# Load the 'leaps' package for subset selection
+library(leaps)
+# Create the full model including all predictors
+full_model <- lm(points ~ position + statusId + rank + tot_pit_time + laps + 
+                   fastestlap_ms + q2_ms + q1_ms, data = F1_Subset)
+# Subset selection using the 'regsubsets' function from the 'leaps' package
+B <- regsubsets(points ~ position + statusId + rank + tot_pit_time + laps + 
+                  fastestlap_ms + q2_ms + q1_ms, data = F1_Subset)
+rs <- summary(B)
+# Display the predictors selected by each model size based on the 'regsubsets' output
+rs$which
+# Calculate the Akaike Information Criterion (AIC) for each model size
+k <- nrow(F1_Subdf) # Number of observations
+s <- 2:10 # Model sizes from 2 to 10 predictors
+AIC <- k * log(rs$rss / k) + 2 * s
+AIC
+# Plot AIC values
+plot(AIC ~ I(s - 1), ylab = "AIC", xlab = "Number of Predictors", col = "blue")
+```
+*The AIC (Akaike Information Criterion) test helps identify the best combination of predictors for a model by considering both the goodness of fit and the complexity of the model. In this case, the AIC values were calculated for different model sizes, ranging from 2 to 10 predictors. The model with the lowest AIC value indicates the best trade-off between model fit and complexity. Based on this test we determined that the third model has the lowest AIC value of 807.0182, which includes predictors "statusId" "position" and "rank".*
+
+AIC Selected Model
+```{r}
+# Fit a linear regression model using the predictors selected by AIC
+AIC_model <- lm(points ~ statusId + position + rank, data = F1_Subset)
+summary(AIC_model)
+```
+
+**BIC**
+```{r, warning = FALSE}
+# Perform subset selection using the 'regsubsets' function from the 'leaps' package
+B <- regsubsets(points ~ position + statusId + rank + tot_pit_time + laps + 
+                  fastestlap_ms + q2_ms + q1_ms, data = F1_Subset)
+rs <- summary(B)
+# Display the predictors selected by each model size based on the 'regsubsets' output
+rs$which
+# Calculate the Bayesian Information Criterion (BIC) for each model size
+k <- nrow(F1_Subdf) # Number of observations
+s <- 2:10 # Model sizes from 2 to 10 predictors
+BIC <- k * log(rs$rss / k) + s * log(k)
+BIC
+# Plot BIC values
+plot(BIC ~ I(s - 1), ylab= "BIC", xlab = "Number of Predictors", col = "blue")
+```
+*The third model has the lowest BIC value of 579.71325. The predictors are statusId, position & rank.*
+*The Bayesian Information Criterion (BIC) helps determine the best combination of predictors for a model by balancing goodness of fit with model complexity. In this case, the BIC values were calculated for different model sizes, ranging from 2 to 10 predictors. The model with the lowest BIC value indicates the best trade-off between model fit and complexity. Based on this test we determined that the third model has the lowest BIC value of 822.8725, which includes predictors "statusId" "position" and "rank".*
+
+BIC Selected Model
+```{r}
+# Fit a linear regression model using the predictors selected by BIC
+BIC_model <- lm(points ~ statusId + position + rank, data = F1_Subset)
+summary(BIC_model)
+```
+
+**AdjR2**
+```{r, warning=FALSE}
+# Perform subset selection using the 'regsubsets' function from the 'leaps' package
+B <- regsubsets(points ~ position + statusId + rank + tot_pit_time + laps + 
+                  fastestlap_ms + q2_ms + q1_ms, data = F1_Subset)
+rs <- summary(B)
+# Display the predictors selected by each model size based on the 'regsubsets' output
+rs$which
+# Calculate Adjusted R-squared values for each model size
+adjusted_r_squared <- rs$adjr2
+adjusted_r_squared 
+```
+*The adjusted R-squared value is a measure of how well the predictors in a model explain the variation in the outcome variable, adjusted for the number of predictors in the model. A higher adjusted R-squared value indicates a better fit of the model to the data. Based on this analysis, the fifth model, which includes predictors "statusId," "rank," "fastestlap_ms", "q2_ms", and "position," has the highest adjusted R-squared value of 0.8312355 among all the models tested.*
+
+Adjusted R-squared Selected Model
+```{r}
+# Fit a linear regression model using the predictors selected by Adjusted R-squared
+AdjR2_model <- lm(points ~ statusId + position + rank + fastestlap_ms + 
+                    q2_ms, data = F1_Subset)
+summary(AdjR2_model)
+```
+
+**Step Function**
+```{r}
+# We are using the F1 dataframe without NA values for running the step function, as it cannot handle NA values.
+# The F1 dataframe includes all predictors (q1, q2, q3) without NA values.
+# Create the full model using the F1 dataframe without NA values
+new_full_model <- lm(points ~ position + statusId + rank + tot_pit_time + laps + 
+                       fastestlap_ms + q2_ms + q1_ms, data = F1_df)
+# Choose the best model using the stepwise variable selection method
+step(new_full_model)
+```
+*The step function is a method for variable selection that iteratively adds or removes predictors from a model based on certain criteria, such as the Akaike Information Criterion (AIC). In this analysis, we applied the step function to select the best-fitting model from the full model. The output indicates that the seventh model, with an AIC value of 417.1, is the most optimal model among all the models tested. This model includes the predictors "statusId," "rank," and "position." The lowest AIC value suggests that this model provides the best balance between goodness of fit and model complexity compared to other models considered.*
+
+```{r}
+#Summary statistics
+step_selected_model <- lm(points ~ statusId + position + rank, data = F1_df) 
+summary(step_selected_model)
+```
+*Based on the results of the lowest AIC, lowest BIC, highest adjusted R-squared, and step function tests, we concluded that the most optimal model was the three predictor model including "statusId," "rank," and "position." These predictors were consistently selected across multiple model selection criteria, indicating their importance in explaining the variation in the outcome variable.*
+
+**BOX-COX** 
+```{r, message = FALSE}
+require(MASS)
+# Preprocess data with +1 to handle zeros
+F1_Subset$points_1 <- F1_Subset$points + 1 
+```
+
+Squaring each predictor of the AIC model - statusId, rank, position  
+*statusId*
+```{r, warning = FALSE}
+#squaring statusId
+lmod_statid <- (lm(points_1 ~ statusId + I(statusId^2) + position + rank + 
+                     fastestlap_ms + tot_pit_time + laps + q1_ms + q2_ms +q3_ms 
+                   + points, F1_Subset))
+summary(lmod_statid)
+```
+
+finding lambda - statusId
+```{r}
+require(MASS)
+boxcox_results_statid <- boxcox(lmod_statid, plotit = TRUE)
+lamda_statid <- boxcox_results_statid$x[which.max(boxcox_results_statid$y)]
+print(lamda_statid)
+```
+
+**Transformed Model: statusId(squared)**
+```{r}
+require(MASS)
+# add code to transform model based on lambda
+trans_val_statid <- (F1_Subset$points_1)^(lamda_statid)
+# Fit a new linear model with the transformed variable
+lmodTrans_statid <- lm(trans_val_statid ~ ., data = F1_Subset)
+summary(lmodTrans_statid)
+plot(fitted(lmodTrans_statid), rstandard(lmodTrans_statid), xlab = "Fitted", 
+     ylab = "Standardized Residual" , col="slateblue")
+abline(h = 0, col = "peru")
+# Set up layout for two panels side by side
+par(mfrow = c(1, 2))
+# Left panel: QQ plot of standardized residuals
+qqnorm(rstandard(lmodTrans_statid), main = "Q-Q Plot" , col = "violet") 
+abline(0, 1, col = "grey35")
+# Right panel: Histogram of standardized residuals
+hist(rstandard(lmodTrans_statid), main = "Histogram ", 
+     xlab = "Standardized Residuals" ,col = "plum")
+par(mfrow = c(1, 1))
+```
+*We performed this transformation on the model for each predictor and got the same output. The lambda value was very close to 1 at 0.989899. Despite using a lambda value to transform the model we were unable to make the model fit better.*
+
+**Prediction**
+```{r}
+# Fetch the last row of the F1 dataframe to get an example of data for prediction
+noOfRows <- nrow(F1_df)
+F1_df[noOfRows,]
+```
+
+```{r}
+# Create a new dataframe with predictor variables for which predictions will be made
+newdata <- data.frame(position = 3, rank = 6, statusId = 1)
+# Use the function to generate a prediction interval using the AIC_model
+predict_interval <- predict(AIC_model, newdata, interval = "predict")
+# Print the prediction interval
+print("Prediction Interval:")
+predict_interval 
+# Use the function again to generate a confidence interval using the AIC_model
+confidence_interval <- predict(AIC_model, newdata, interval = "confidence")
+# Print the confidence interval
+print("Confidence Interval:") 
+confidence_interval
+```
+
+
+*The prediction interval [3.80, 17.96], signifies a 95% probability that a future observation of points will be contained in the interval, given the values of position = 3, rank = 6, and statusId = 1. At the same time, there is a 5% probability that the next observation of points will not land between the interval, given these predictor values. Additionally, the confidence interval for the average points of the driver [10.29, 11.47], indicates that we are 95% confident that the average points for this driver across multiple races will lie within this interval. This interval accounts for the uncertainty associated with estimating the average points based on the available data. Therefore, it serves as a measure of the precision of our estimate of the driver's average performance, allowing us to assess the range within which the true average points are likely to be situated.*

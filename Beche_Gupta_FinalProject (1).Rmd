@@ -1,0 +1,215 @@
+---
+title: "Causal Inference Final Project"
+author: "Kajal Gupta, Farah Beche"
+date: "2024-12-20"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(tidyr)
+
+# Load the datasets
+adult23 <- read.csv("adult23.csv")
+adult22 <- read.csv("adult22.csv")
+
+# Merge the two datasets
+merged_data <- bind_rows(adult23, adult22)
+
+# Define the variables to clean
+variables <- c(
+  "EMPLASTWK_A",  # Worked for pay last week
+  "INCWRKO_A",    # Income from wages
+  "HISPALLP_A",   # Race and Hispanic origin
+  "SEX_A",        # Gender
+  "VIRAPP12M_A",  # Virtual medical appointment
+  "NOTCOV_A",     # Insurance coverage
+  "TRANSPOR_A"    # Transportation availability
+)
+
+# Filter the dataset to keep only relevant variables
+filtered_data <- merged_data[ , variables]
+
+# Recode variables
+cleaned_data <- filtered_data %>% 
+  mutate(
+    EMPLASTWK_A = case_when(
+      EMPLASTWK_A == 1 ~ 0,  # Yes -> 0
+      EMPLASTWK_A == 2 ~ 1,  # No -> 1
+      TRUE ~ NA_real_        # Drop rows with Refused/Not Ascertained/Don't Know
+    ),
+    INCWRKO_A = case_when(
+      INCWRKO_A == 1 ~ 0,  # Yes -> 0
+      INCWRKO_A == 2 ~ 1,  # No -> 1
+      TRUE ~ NA_real_      # Drop rows with Refused/Not Ascertained/Don't Know
+    ),
+    HISPALLP_A = case_when(
+      HISPALLP_A %in% 1:7 ~ HISPALLP_A - 1,  # Categories 1-7 -> 0 to 6
+      TRUE ~ NA_real_                        # Drop rows with Refused/Not Ascertained/Don't Know
+    ),
+    SEX_A = case_when(
+      SEX_A == 1 ~ 0,  # Male -> 0
+      SEX_A == 2 ~ 1,  # Female -> 1
+      TRUE ~ NA_real_  # Drop rows with Refused/Not Ascertained/Don't Know
+    ),
+    VIRAPP12M_A = case_when(
+      VIRAPP12M_A == 1 ~ 0,  # Yes -> 0
+      VIRAPP12M_A == 2 ~ 1,  # No -> 1
+      TRUE ~ NA_real_        # Drop rows with Refused/Not Ascertained/Don't Know
+    ),
+    NOTCOV_A = case_when(
+      NOTCOV_A == 1 ~ 0,  # Not covered -> 0
+      NOTCOV_A == 2 ~ 1,  # Covered -> 1
+      TRUE ~ NA_real_     # Drop rows with Refused/Not Ascertained/Don't Know
+    ),
+    TRANSPOR_A = case_when(
+      TRANSPOR_A == 1 ~ 0,  # Yes -> 0
+      TRANSPOR_A == 2 ~ 1,  # No -> 1
+      TRUE ~ NA_real_       # Drop rows with Refused/Not Ascertained/Don't Know
+    )
+  )
+
+# Drop rows with any NA values (i.e., rows with Refused/Not Ascertained/Don't Know)
+cleaned_data <- cleaned_data %>% drop_na()
+
+# Save the cleaned dataset
+write.csv(cleaned_data, "cleaned_data_no_na.csv", row.names = FALSE)
+
+# Check the structure of the cleaned data
+str(cleaned_data)
+
+data_clean <- read.csv("cleaned_data_no_na.csv")
+```
+
+
+## MATCHING
+```{r, warning=FALSE}
+# Load required libraries
+library(MatchIt)
+library(cobalt)
+library(dplyr)
+library(ggplot2)
+library(optmatch)
+library(MASS)
+library(exactRankTests)
+library(coin)
+
+# Load the cleaned dataset
+data_clean <- read.csv("cleaned_data_no_na.csv")
+
+# Define the balance formula for covariates
+balance_formula <- ~ EMPLASTWK_A + SEX_A + HISPALLP_A + NOTCOV_A + TRANSPOR_A
+
+# Check balance before matching
+bal_before <- bal.tab(balance_formula, treat = data_clean$INCWRKO_A, data = data_clean, un = TRUE, binary = "std")
+print("Balance before matching:")
+print(bal_before)
+
+# Estimate propensity scores using logistic regression
+ps_model <- glm(INCWRKO_A ~ EMPLASTWK_A + SEX_A + HISPALLP_A + NOTCOV_A + TRANSPOR_A, 
+                family = binomial, data = data_clean)
+
+# Add propensity scores to the data
+data_clean$logit_ps <- predict(ps_model, type = "response")
+
+# Perform matching using nearest neighbor method
+m_out <- matchit(INCWRKO_A ~ EMPLASTWK_A + SEX_A + HISPALLP_A + NOTCOV_A + TRANSPOR_A, 
+                 data = data_clean, method = "nearest", distance = "logit")
+
+summary(m_out)
+# Check balance after matching
+bal_after <- bal.tab(balance_formula, treat = data_clean$INCWRKO_A, data = data_clean, 
+                     subclass = m_out$subclass, un = TRUE, binary = "std")
+print("Balance after matching:")
+print(bal_after)
+```
+
+
+```{r, warning=FALSE}
+love.plot(m_out, stats = "mean.diffs", threshold = 0.1)
+```
+
+
+
+
+
+## OUTCOME ANALYSIS
+```{r}
+# Extract matched dataset
+matched_data <- match.data(m_out)
+
+# Logistic regression model to estimate the treatment effect on the outcome (VIRAPP12M_A)
+logistic_model <- glm(VIRAPP12M_A ~ INCWRKO_A + EMPLASTWK_A + SEX_A + HISPALLP_A + NOTCOV_A + TRANSPOR_A,
+                      family = binomial(), data = matched_data)
+
+# Display model summary
+summary(logistic_model)
+
+# You can also check the odds ratio for the treatment effect (INCWRKO_A)
+exp(coef(logistic_model)) 
+
+# Check outcome distribution by treatment status
+table(matched_data$VIRAPP12M_A, matched_data$INCWRKO_A)
+
+# Visualize outcome distribution for treated vs. control groups
+library(ggplot2)
+ggplot(matched_data, aes(x = VIRAPP12M_A, fill = as.factor(INCWRKO_A))) +
+  geom_bar(position = "dodge") +
+  labs(title = "Outcome Distribution by Treatment Group", x = "Outcome", y = "Count") +
+  scale_fill_manual(values = c("skyblue", "salmon"), labels = c("Control", "Treated")) +
+  theme_minimal()
+```
+
+
+
+## SENSITIVITY ANALYSIS
+```{r}
+#Rosenbaum Sensitivity Analysis 
+library(sensitivity)
+library(sensitivity2x2xk)
+library(sensitivityfull)
+library(sensitivitymv)
+library(sensitivitymw)
+library (rbounds)
+
+# Create a balanced subset (equal numbers of outcomes 0 and 1)
+outcome_0 <- matched_data[matched_data$VIRAPP12M_A == 0, ]
+outcome_1 <- matched_data[matched_data$VIRAPP12M_A == 1, ]
+
+# Sample equal numbers from each group
+set.seed(123)  # For reproducibility
+sample_0 <- outcome_0[sample(1:nrow(outcome_0), size = 500), ]
+sample_1 <- outcome_1[sample(1:nrow(outcome_1), size = 500), ]
+
+balanced_data <- rbind(sample_0, sample_1)
+
+# Run sensitivity analysis on the balanced subset
+treatment_balanced <- balanced_data$INCWRKO_A
+outcome_balanced <- balanced_data$VIRAPP12M_A
+test_result <- psens(outcome_balanced, treatment_balanced, Gamma = 1.5, GammaInc = 0.1)
+print(test_result)
+```
+
+```{r}
+# Create a vector for Gamma values
+# Define the Gamma values and the corresponding lower and upper bounds
+Gamma_values <- c(1.0, 1.1, 1.2, 1.3, 1.4, 1.5)
+lower_bounds <- c(0.4113, 0.0990, 0.0119, 0.0008, 0.0000, 0.0000)
+upper_bounds <- c(0.4113, 0.7991, 0.9648, 0.9966, 0.9998, 1.0000)
+
+# Plot the sensitivity analysis results
+plot(Gamma_values, lower_bounds, type = "b", col = "skyblue", pch = 19, ylim = c(0, 1),
+     xlab = "Gamma", ylab = "P-value Bound", main = "Rosenbaum Sensitivity Analysis")
+lines(Gamma_values, upper_bounds, type = "b", col = "salmon", pch = 19)
+
+# Add a legend to the plot
+legend("right", legend = c("Lower Bound", "Upper Bound"), col = c("skyblue", "salmon"), pch = 19)
+```
+
+
+
